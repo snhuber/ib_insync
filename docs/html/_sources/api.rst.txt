@@ -44,10 +44,7 @@ Objects
 
 .. automodule:: ib_insync.objects
 
-Event
------
-
-.. automodule:: ib_insync.event
+.. autoclass:: ib_insync.wrapper.RequestError
 
 Utilities
 ---------

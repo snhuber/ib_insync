@@ -1,13 +1,19 @@
-import ibapi.contract
+"""Financial instrument types used by Interactive Brokers."""
 
-from ib_insync.objects import Object
+from dataclasses import dataclass, field
+from typing import List, NamedTuple, Optional
+
+import ib_insync.util as util
 
 __all__ = (
     'Contract Stock Option Future ContFuture Forex Index CFD '
-    'Commodity Bond FuturesOption MutualFund Warrant Bag').split()
+    'Commodity Bond FuturesOption MutualFund Warrant Bag '
+    'TagValue ComboLeg DeltaNeutralContract ContractDetails '
+    'ContractDescription ScanData').split()
 
 
-class Contract(Object):
+@dataclass
+class Contract:
     """
     ``Contract(**kwargs)`` can create any contract using keyword
     arguments. To simplify working with contracts, there are also more
@@ -77,18 +83,33 @@ class Contract(Object):
         deltaNeutralContract (DeltaNeutralContract): Delta and underlying
             price for Delta-Neutral combo orders.
     """
-    defaults = {'secType': '', **ibapi.contract.Contract().__dict__}
-    __slots__ = list(defaults.keys()) + \
-        ['comboLegsCount', 'underCompPresent', 'deltaNeutralContractPresent',
-            'secIdListCount']  # bug in decoder.py
+
+    secType: str = ''
+    conId: int = 0
+    symbol: str = ''
+    lastTradeDateOrContractMonth: str = ''
+    strike: float = 0.0
+    right: str = ''
+    multiplier: str = ''
+    exchange: str = ''
+    primaryExchange: str = ''
+    currency: str = ''
+    localSymbol: str = ''
+    tradingClass: str = ''
+    includeExpired: bool = False
+    secIdType: str = ''
+    secId: str = ''
+    comboLegsDescrip: str = ''
+    comboLegs: List['ComboLeg'] = field(default_factory=list)
+    deltaNeutralContract: Optional['DeltaNeutralContract'] = None
 
     @staticmethod
-    def create(**kwargs):
+    def create(**kwargs) -> 'Contract':
         """
         Create and a return a specialized contract based on the given secType,
         or a general Contract if secType is not given.
         """
-        secType = kwargs.pop('secType', '')
+        secType = kwargs.get('secType', '')
         cls = {
             '': Contract,
             'STK': Stock,
@@ -102,35 +123,44 @@ class Contract(Object):
             'CMDTY': Commodity,
             'FOP': FuturesOption,
             'FUND': MutualFund,
+            'WAR': Warrant,
             'IOPT': Warrant,
             'BAG': Bag,
             'NEWS': Contract
-        }[secType]
+        }.get(secType, Contract)
+        if cls is not Contract:
+            kwargs.pop('secType', '')
         return cls(**kwargs)
 
-    def isHashable(self):
+    def isHashable(self) -> bool:
         """
         See if this contract can be hashed by conId.
 
-        Note: Bag contracts always get conId=28812380 and ContFutures get the
-        same conId as the front contract, so these contract types are
-        not hashable.
+        Note: Bag contracts always get conId=28812380, so they're not hashable.
         """
-        return self.conId and self.conId != 28812380 and \
-            self.secType not in ('BAG', 'CONTFUT')
+        return bool(
+            self.conId and self.conId != 28812380
+            and self.secType != 'BAG')
 
     def __eq__(self, other):
-        return self.isHashable() and isinstance(other, Contract) and \
-                self.conId == other.conId \
-                or Object.__eq__(self, other)
+        return (
+            isinstance(other, Contract)
+            and (
+                self.conId and self.conId == other.conId
+                or util.dataclassAsDict(self) == util.dataclassAsDict(other)))
 
     def __hash__(self):
         if not self.isHashable():
             raise ValueError(f'Contract {self} can\'t be hashed')
-        return self.conId
+        if self.secType == 'CONTFUT':
+            # CONTFUT gets the same conId as the front contract, invert it here
+            h = -self.conId
+        else:
+            h = self.conId
+        return h
 
     def __repr__(self):
-        attrs = self.nonDefaults()
+        attrs = util.dataclassNonDefaults(self)
         if self.__class__ is not Contract:
             attrs.pop('secType', '')
         clsName = self.__class__.__qualname__
@@ -141,7 +171,6 @@ class Contract(Object):
 
 
 class Stock(Contract):
-    __slots__ = ()
 
     def __init__(
             self, symbol: str = '', exchange: str = '', currency: str = '',
@@ -160,7 +189,6 @@ class Stock(Contract):
 
 
 class Option(Contract):
-    __slots__ = ()
 
     def __init__(
             self, symbol: str = '', lastTradeDateOrContractMonth: str = '',
@@ -184,14 +212,13 @@ class Option(Contract):
             currency: Underlying currency.
         """
         Contract.__init__(
-                self, 'OPT', symbol=symbol,
-                lastTradeDateOrContractMonth=lastTradeDateOrContractMonth,
-                strike=strike, right=right, exchange=exchange,
-                multiplier=multiplier, currency=currency, **kwargs)
+            self, 'OPT', symbol=symbol,
+            lastTradeDateOrContractMonth=lastTradeDateOrContractMonth,
+            strike=strike, right=right, exchange=exchange,
+            multiplier=multiplier, currency=currency, **kwargs)
 
 
 class Future(Contract):
-    __slots__ = ()
 
     def __init__(
             self, symbol: str = '', lastTradeDateOrContractMonth: str = '',
@@ -213,14 +240,13 @@ class Future(Contract):
             currency: Underlying currency.
         """
         Contract.__init__(
-                self, 'FUT', symbol=symbol,
-                lastTradeDateOrContractMonth=lastTradeDateOrContractMonth,
-                exchange=exchange, localSymbol=localSymbol,
-                multiplier=multiplier, currency=currency, **kwargs)
+            self, 'FUT', symbol=symbol,
+            lastTradeDateOrContractMonth=lastTradeDateOrContractMonth,
+            exchange=exchange, localSymbol=localSymbol,
+            multiplier=multiplier, currency=currency, **kwargs)
 
 
 class ContFuture(Contract):
-    __slots__ = ()
 
     def __init__(
             self, symbol: str = '', exchange: str = '', localSymbol: str = '',
@@ -236,13 +262,12 @@ class ContFuture(Contract):
             currency: Underlying currency.
         """
         Contract.__init__(
-                self, 'CONTFUT', symbol=symbol,
-                exchange=exchange, localSymbol=localSymbol,
-                multiplier=multiplier, currency=currency, **kwargs)
+            self, 'CONTFUT', symbol=symbol,
+            exchange=exchange, localSymbol=localSymbol,
+            multiplier=multiplier, currency=currency, **kwargs)
 
 
 class Forex(Contract):
-    __slots__ = ()
 
     def __init__(
             self, pair: str = '', exchange: str = 'IDEALPRO',
@@ -261,11 +286,11 @@ class Forex(Contract):
             symbol = symbol or pair[:3]
             currency = currency or pair[3:]
         Contract.__init__(
-                self, 'CASH', symbol=symbol,
-                exchange=exchange, currency=currency, **kwargs)
+            self, 'CASH', symbol=symbol,
+            exchange=exchange, currency=currency, **kwargs)
 
     def __repr__(self):
-        attrs = self.nonDefaults()
+        attrs = util.dataclassNonDefaults(self)
         attrs.pop('secType')
         s = 'Forex('
         if 'symbol' in attrs and 'currency' in attrs:
@@ -279,14 +304,11 @@ class Forex(Contract):
     __str__ = __repr__
 
     def pair(self) -> str:
-        '''
-        Short name of pair.
-        '''
+        """Short name of pair."""
         return self.symbol + self.currency
 
 
 class Index(Contract):
-    __slots__ = ()
 
     def __init__(
             self, symbol: str = '', exchange: str = '', currency: str = '',
@@ -300,12 +322,11 @@ class Index(Contract):
             currency: Underlying currency.
         """
         Contract.__init__(
-                self, 'IND', symbol=symbol,
-                exchange=exchange, currency=currency, **kwargs)
+            self, 'IND', symbol=symbol,
+            exchange=exchange, currency=currency, **kwargs)
 
 
 class CFD(Contract):
-    __slots__ = ()
 
     def __init__(
             self, symbol: str = '', exchange: str = '', currency: str = '',
@@ -319,12 +340,11 @@ class CFD(Contract):
             currency: Underlying currency.
         """
         Contract.__init__(
-                self, 'CFD', symbol=symbol,
-                exchange=exchange, currency=currency, **kwargs)
+            self, 'CFD', symbol=symbol,
+            exchange=exchange, currency=currency, **kwargs)
 
 
 class Commodity(Contract):
-    __slots__ = ()
 
     def __init__(
             self, symbol: str = '', exchange: str = '', currency: str = '',
@@ -338,22 +358,18 @@ class Commodity(Contract):
             currency: Underlying currency.
         """
         Contract.__init__(
-                self, 'CMDTY', symbol=symbol,
-                exchange=exchange, currency=currency, **kwargs)
+            self, 'CMDTY', symbol=symbol,
+            exchange=exchange, currency=currency, **kwargs)
 
 
 class Bond(Contract):
-    __slots__ = ()
 
     def __init__(self, **kwargs):
-        """
-        Bond.
-        """
+        """Bond."""
         Contract.__init__(self, 'BOND', **kwargs)
 
 
 class FuturesOption(Contract):
-    __slots__ = ()
 
     def __init__(
             self, symbol: str = '', lastTradeDateOrContractMonth: str = '',
@@ -377,37 +393,113 @@ class FuturesOption(Contract):
             currency: Underlying currency.
         """
         Contract.__init__(
-                self, 'FOP', symbol=symbol,
-                lastTradeDateOrContractMonth=lastTradeDateOrContractMonth,
-                strike=strike, right=right, exchange=exchange,
-                multiplier=multiplier, currency=currency, **kwargs)
+            self, 'FOP', symbol=symbol,
+            lastTradeDateOrContractMonth=lastTradeDateOrContractMonth,
+            strike=strike, right=right, exchange=exchange,
+            multiplier=multiplier, currency=currency, **kwargs)
 
 
 class MutualFund(Contract):
-    __slots__ = ()
 
     def __init__(self, **kwargs):
-        """
-        Mutual fund.
-        """
+        """Mutual fund."""
         Contract.__init__(self, 'FUND', **kwargs)
 
 
 class Warrant(Contract):
-    __slots__ = ()
 
     def __init__(self, **kwargs):
-        """
-        Warrant option.
-        """
-        Contract.__init__(self, 'IOPT', **kwargs)
+        """Warrant option."""
+        Contract.__init__(self, 'WAR', **kwargs)
 
 
 class Bag(Contract):
-    __slots__ = ()
 
     def __init__(self, **kwargs):
-        """
-        Bag contract.
-        """
+        """Bag contract."""
         Contract.__init__(self, 'BAG', **kwargs)
+
+
+class TagValue(NamedTuple):
+    tag: str
+    value: str
+
+
+@dataclass
+class ComboLeg:
+    conId: int = 0
+    ratio: int = 0
+    action: str = ''
+    exchange: str = ''
+    openClose: int = 0
+    shortSaleSlot: int = 0
+    designatedLocation: str = ''
+    exemptCode: int = -1
+
+
+@dataclass
+class DeltaNeutralContract:
+    conId: int = 0
+    delta: float = 0.0
+    price: float = 0.0
+
+
+@dataclass
+class ContractDetails:
+    contract: Optional[Contract] = None
+    marketName: str = ''
+    minTick: float = 0.0
+    orderTypes: str = ''
+    validExchanges: str = ''
+    priceMagnifier: int = 0
+    underConId: int = 0
+    longName: str = ''
+    contractMonth: str = ''
+    industry: str = ''
+    category: str = ''
+    subcategory: str = ''
+    timeZoneId: str = ''
+    tradingHours: str = ''
+    liquidHours: str = ''
+    evRule: str = ''
+    evMultiplier: int = 0
+    mdSizeMultiplier: int = 0
+    aggGroup: int = 0
+    underSymbol: str = ''
+    underSecType: str = ''
+    marketRuleIds: str = ''
+    secIdList: List[TagValue] = field(default_factory=list)
+    realExpirationDate: str = ''
+    lastTradeTime: str = ''
+    stockType: str = ''
+    cusip: str = ''
+    ratings: str = ''
+    descAppend: str = ''
+    bondType: str = ''
+    couponType: str = ''
+    callable: bool = False
+    putable: bool = False
+    coupon: int = 0
+    convertible: bool = False
+    maturity: str = ''
+    issueDate: str = ''
+    nextOptionDate: str = ''
+    nextOptionType: str = ''
+    nextOptionPartial: bool = False
+    notes: str = ''
+
+
+@dataclass
+class ContractDescription:
+    contract: Optional[Contract] = None
+    derivativeSecTypes: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ScanData:
+    rank: int
+    contractDetails: ContractDetails
+    distance: str
+    benchmark: str
+    projection: str
+    legsStr: str

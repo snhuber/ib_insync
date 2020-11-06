@@ -1,6 +1,6 @@
 import asyncio
 
-import PyQt5.Qt as qt
+import PyQt5.QtWidgets as qt
 # import PySide2.QtWidgets as qt
 
 from ib_insync import IB, util
@@ -87,6 +87,7 @@ class Window(qt.QWidget):
             self.connectButton.setText('Connect')
         else:
             self.ib.connect(*self.connectInfo)
+            self.ib.reqMarketDataType(2)
             self.connectButton.setText('Disonnect')
             for symbol in (
                     'EURUSD', 'USDJPY', 'EURGBP', 'USDCAD',

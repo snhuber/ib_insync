@@ -145,6 +145,65 @@ News bulletins
     ib.sleep(5)
     print(ib.newsBulletins())
 
+Dividends
+^^^^^^^^^
+
+.. code-block:: python
+
+    contract = Stock('INTC', 'SMART', 'USD')
+    ticker = ib.reqMktData(contract, '456')
+    ib.sleep(2)
+    print(ticker.dividends)
+
+Output::
+
+    Dividends(past12Months=1.2, next12Months=1.2, nextDate=datetime.date(2019, 2, 6), nextAmount=0.3)
+
+Fundemental ratios
+^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+    contract = Stock('IBM', 'SMART', 'USD')
+    ticker = ib.reqMktData(contract, '258')
+    ib.sleep(2)
+    print(ticker.fundamentalRatios)
+
+Async streaming ticks
+^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+    import asyncio
+
+    import ib_insync as ibi
+
+
+    class App:
+
+        async def run(self):
+            self.ib = ibi.IB()
+            with await self.ib.connectAsync():
+                contracts = [
+                    ibi.Stock(symbol, 'SMART', 'USD')
+                    for symbol in ['AAPL', 'TSLA', 'AMD', 'INTC']]
+                for contract in contracts:
+                    self.ib.reqMktData(contract)
+
+                async for tickers in self.ib.pendingTickersEvent:
+                    for ticker in tickers:
+                        print(ticker)
+
+        def stop(self):
+            self.ib.disconnect()
+
+
+    app = App()
+    try:
+        asyncio.run(app.run())
+    except (KeyboardInterrupt, SystemExit):
+        app.stop()
+
 Integration with PyQt5 or PySide2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -173,4 +232,4 @@ Integration with Tkinter
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 To integrate with the Tkinter event loop, take a look at
-`this example <https://github.com/erdewit/ib_insync/blob/master/examples/tk.py>`_.
+`this example app <https://github.com/erdewit/ib_insync/blob/master/examples/tk.py>`_.
